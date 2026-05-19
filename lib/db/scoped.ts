@@ -1,14 +1,39 @@
-// Tenant-scoped data access. Phase 2 implements this on top of `auth()` from
-// lib/auth.ts: every call reads `gymId` from the session and returns a Prisma
-// client extension that auto-filters tenant tables by that gymId.
-//
-// Defining the API surface now keeps later commits focused on logic, not
-// boilerplate.
+import { redirect } from "next/navigation";
 
-export function getScopedDb(_gymId: string): never {
-  throw new Error("getScopedDb is not implemented yet — wired up in Phase 2.");
+import { auth, type Session } from "@/lib/auth";
+import type { Role } from "@/lib/generated/prisma/enums";
+
+/**
+ * Ensure the request has a session. Redirects to /login if not.
+ * Use in Server Components and Server Actions.
+ */
+export async function requireSession(): Promise<Session> {
+  const session = await auth();
+  if (!session?.user) {
+    redirect("/login");
+  }
+  return session;
 }
 
-export function requireSession(): never {
-  throw new Error("requireSession is not implemented yet — wired up in Phase 2.");
+/**
+ * Ensure the user has one of the allowed roles. Otherwise redirects to /dashboard.
+ */
+export async function requireRole(allowed: Role[]): Promise<Session> {
+  const session = await requireSession();
+  if (!allowed.includes(session.user.role)) {
+    redirect("/dashboard");
+  }
+  return session;
+}
+
+/**
+ * Ensure the user is attached to a gym (every operating user must be).
+ * Returns the gymId so downstream Prisma queries can filter on it.
+ */
+export async function requireGymId(): Promise<{ session: Session; gymId: string }> {
+  const session = await requireSession();
+  if (!session.user.gymId) {
+    redirect("/login");
+  }
+  return { session, gymId: session.user.gymId };
 }

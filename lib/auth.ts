@@ -1,19 +1,108 @@
-// Phase 1 stub. Phase 2 replaces this with a full Auth.js v5 configuration:
-//   NextAuth({ adapter: PrismaAdapter(prisma), session: { strategy: "jwt" },
-//              providers: [Credentials, Google], callbacks: { jwt, session } })
-// We export the type contract now so layouts and server components can import
-// `auth` and `signOut` without breaking when Phase 2 fills these in.
+import NextAuth, { type DefaultSession } from "next-auth";
+import Credentials from "next-auth/providers/credentials";
+import Google from "next-auth/providers/google";
+import { PrismaAdapter } from "@auth/prisma-adapter";
+import bcrypt from "bcryptjs";
 
-type NotConfigured = () => never;
+import { prisma } from "@/lib/db";
+import { loginSchema } from "@/lib/validators/auth";
+import type { Role } from "@/lib/generated/prisma/enums";
 
-const notConfigured: NotConfigured = () => {
-  throw new Error("Auth not configured yet — wired up in Phase 2.");
+export const {
+  auth,
+  handlers,
+  signIn,
+  signOut,
+} = NextAuth({
+  adapter: PrismaAdapter(prisma),
+  session: { strategy: "jwt" },
+  pages: {
+    signIn: "/login",
+  },
+  providers: [
+    Credentials({
+      credentials: {
+        email: { label: "Email", type: "email" },
+        password: { label: "Password", type: "password" },
+      },
+      async authorize(rawCredentials) {
+        const parsed = loginSchema.safeParse(rawCredentials);
+        if (!parsed.success) return null;
+
+        const { email, password } = parsed.data;
+        const user = await prisma.user.findUnique({ where: { email } });
+        if (!user || !user.hashedPassword) return null;
+
+        const valid = await bcrypt.compare(password, user.hashedPassword);
+        if (!valid) return null;
+
+        return {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          image: user.image,
+          role: user.role,
+          gymId: user.gymId,
+        } satisfies AuthorizedUser;
+      },
+    }),
+    ...(process.env.AUTH_GOOGLE_ID && process.env.AUTH_GOOGLE_SECRET
+      ? [
+          Google({
+            clientId: process.env.AUTH_GOOGLE_ID,
+            clientSecret: process.env.AUTH_GOOGLE_SECRET,
+          }),
+        ]
+      : []),
+  ],
+  callbacks: {
+    async jwt({ token, user, trigger }) {
+      // First sign-in: copy role + gymId from the User onto the JWT.
+      if (user) {
+        token.id = user.id as string;
+        token.role = (user as AuthorizedUser).role;
+        token.gymId = (user as AuthorizedUser).gymId;
+        return token;
+      }
+
+      // On update() or session refresh, re-read from DB so role/gym changes propagate.
+      if (trigger === "update" && token.id) {
+        const fresh = await prisma.user.findUnique({
+          where: { id: token.id as string },
+          select: { role: true, gymId: true },
+        });
+        if (fresh) {
+          token.role = fresh.role;
+          token.gymId = fresh.gymId;
+        }
+      }
+
+      return token;
+    },
+    async session({ session, token }) {
+      if (session.user) {
+        session.user.id = token.id;
+        session.user.role = token.role;
+        session.user.gymId = token.gymId;
+      }
+      return session;
+    },
+  },
+});
+
+type AuthorizedUser = {
+  id: string;
+  email: string | null;
+  name: string | null;
+  image: string | null;
+  role: Role;
+  gymId: string | null;
 };
 
-export const auth = notConfigured;
-export const signIn = notConfigured;
-export const signOut = notConfigured;
-export const handlers = {
-  GET: notConfigured,
-  POST: notConfigured,
+// Re-export the augmented Session type for convenience.
+export type { Session } from "next-auth";
+export type SessionUser = DefaultSession["user"] & {
+  id: string;
+  role: Role;
+  gymId: string | null;
 };

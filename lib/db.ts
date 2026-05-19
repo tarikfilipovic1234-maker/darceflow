@@ -7,10 +7,10 @@ const globalForPrisma = globalThis as unknown as {
 };
 
 function createPrismaClient() {
-  const connectionString = process.env.DATABASE_URL;
-  if (!connectionString) {
-    throw new Error("DATABASE_URL is not set. Copy .env.example to .env and fill it in.");
-  }
+  // Do not throw at module-load time. A missing DATABASE_URL must let the
+  // build collect page data successfully; the error will surface naturally on
+  // the first real query when the Neon driver tries to connect.
+  const connectionString = process.env.DATABASE_URL ?? "";
   const adapter = new PrismaNeon({ connectionString });
   return new PrismaClient({ adapter });
 }
