@@ -1,36 +1,110 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# darceflow
 
-## Getting Started
+Gym management for Brazilian Jiu-Jitsu academies. Multi-tenant SaaS covering
+memberships, attendance, belt progression, class scheduling, technique library,
+and Stripe billing.
 
-First, run the development server:
+## Stack
+
+- **Next.js 16** (App Router, Turbopack, async `params` / `cookies` / `headers`,
+  `proxy.ts` replacing `middleware.ts`)
+- **React 19**
+- **TypeScript 5** (strict)
+- **Tailwind CSS v4** (CSS-first config, `@theme inline`, `@custom-variant dark`)
+- **shadcn/ui** (base-nova preset)
+- **Prisma 7** with the **Neon serverless driver adapter**
+- **Auth.js v5** (next-auth beta) with Prisma adapter — wired in Phase 2
+- **PostgreSQL** on [Neon](https://neon.tech)
+
+## Prerequisites
+
+- Node.js 22 (see `.nvmrc`)
+- A free [Neon](https://neon.tech) project (Postgres host)
+
+## Setup
 
 ```bash
+# 1. Install dependencies
+npm install
+
+# 2. Copy environment template and fill it in
+cp .env.example .env
+#    Required:
+#    - DATABASE_URL  — Neon pooled connection (the URL with `-pooler`)
+#    - DIRECT_URL    — Neon direct connection (for migrations)
+#    - AUTH_SECRET   — generate with `openssl rand -base64 32`
+
+# 3. Generate the Prisma client and run the initial migration
+npm run db:generate
+npm run db:migrate
+
+# 4. (Optional) Seed a demo gym and admin user
+npm run db:seed
+#    Logs in as admin@darceflow.test / admin1234 once Phase 2 is in.
+
+# 5. Start the dev server
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+App runs at <http://localhost:3000>.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Scripts
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Command              | What it does                                          |
+| -------------------- | ----------------------------------------------------- |
+| `npm run dev`        | Start the Next.js dev server (Turbopack)              |
+| `npm run build`      | Production build                                      |
+| `npm run start`      | Run the production build                              |
+| `npm run lint`       | ESLint (flat config)                                  |
+| `npm run typecheck`  | `tsc --noEmit`                                        |
+| `npm run db:generate`| Generate the Prisma client into `lib/generated/prisma`|
+| `npm run db:migrate` | Run a `prisma migrate dev`                            |
+| `npm run db:push`    | Push schema without creating a migration              |
+| `npm run db:studio`  | Open Prisma Studio                                    |
+| `npm run db:seed`    | Run `prisma/seed.ts`                                  |
 
-## Learn More
+## Architecture
 
-To learn more about Next.js, take a look at the following resources:
+```
+app/
+  (marketing)/   Public landing — header, footer, hero, feature grid
+  (auth)/        Sign-in / sign-up (Phase 2)
+  (dashboard)/   Protected app shell (Phase 2+)
+components/
+  ui/            shadcn primitives
+  layout/        Header, footer, theme toggle, brand
+  marketing/     Landing-page sections
+lib/
+  db.ts          Prisma client singleton (Neon adapter)
+  auth.ts        Auth.js v5 wrapper (stub until Phase 2)
+  db/scoped.ts   Tenant-scoped data access (stub until Phase 2)
+  utils.ts       `cn()` helper
+  generated/     Generated Prisma client (gitignored)
+prisma/
+  schema.prisma  Gym, User, Auth.js adapter tables
+  seed.ts        Demo gym + admin
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Multi-tenancy uses a **shared DB with a `gymId` column** on every tenant table.
+Phase 2 introduces the scoped data-access wrapper that auto-applies `gymId`
+from the session to every query.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Roadmap
 
-## Deploy on Vercel
+- [x] **Phase 1** — Project foundation, UI shell, dark mode, Prisma schema
+- [ ] **Phase 2** — Auth.js v5, role-based protected routes (`proxy.ts`)
+- [ ] **Phase 3** — Admin / coach gym dashboard
+- [ ] **Phase 4** — Athlete profiles (belts, stripes, record, injuries)
+- [ ] **Phase 5** — Attendance, streaks, weekly heatmaps, analytics
+- [ ] **Phase 6** — Class booking, waitlists, recurring schedules
+- [ ] **Phase 7** — Technique video library
+- [ ] **Phase 8** — Stripe memberships, invoices, webhooks
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Conventions
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- Conventional Commits (`feat:`, `fix:`, `chore:`, `feat(scope):`)
+- Server Components by default; `'use client'` only where needed
+- Server Actions for mutations (`'use server'`)
+- `proxy.ts` (project root) replaces `middleware.ts` in Next.js 16
+- `params` and `searchParams` are `Promise<T>` — always `await` them
+- `cookies()` and `headers()` are async — always `await` them
