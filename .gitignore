@@ -51,3 +51,16 @@ next-env.d.ts
 !.vscode/settings.json
 
 /lib/generated/prisma
+
+# AI tooling — kept local, not committed
+.claude/
+CLAUDE.md
+AGENTS.md
+.cursor/
+.cursorrules
+.cursorignore
+.aider*
+.continue/
+.windsurfrules
+.codiumai/
+.github/copilot-instructions.md
