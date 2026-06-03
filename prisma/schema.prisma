@@ -27,6 +27,43 @@ enum BeltRank {
   BLACK
 }
 
+enum BodyPart {
+  HEAD
+  NECK
+  SHOULDER
+  ELBOW
+  WRIST
+  HAND_FINGER
+  RIBS
+  BACK
+  HIP
+  GROIN
+  KNEE
+  ANKLE
+  FOOT_TOE
+  OTHER
+}
+
+enum InjurySeverity {
+  MINOR
+  MODERATE
+  SEVERE
+}
+
+enum InjuryStatus {
+  ACTIVE
+  RECOVERING
+  RESOLVED
+}
+
+enum CompetitionPlacement {
+  GOLD
+  SILVER
+  BRONZE
+  FOURTH
+  DNP
+}
+
 model Gym {
   id        String   @id @default(cuid())
   slug      String   @unique
@@ -34,9 +71,12 @@ model Gym {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  users            User[]
-  classDefinitions ClassDefinition[]
-  classSessions    ClassSession[]
+  users              User[]
+  classDefinitions   ClassDefinition[]
+  classSessions      ClassSession[]
+  beltPromotions     BeltPromotion[]
+  competitionResults CompetitionResult[]
+  injuries           Injury[]
 }
 
 model User {
@@ -49,14 +89,20 @@ model User {
   role           Role      @default(STUDENT)
   belt           BeltRank?
   stripes        Int       @default(0)
+  weightClassKg  Int?
+  bio            String?
   gymId          String?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
-  gym             Gym?              @relation(fields: [gymId], references: [id])
-  accounts        Account[]
-  sessions        Session[]
-  coachedClasses  ClassDefinition[] @relation("CoachClasses")
+  gym                Gym?                @relation(fields: [gymId], references: [id])
+  accounts           Account[]
+  sessions           Session[]
+  coachedClasses     ClassDefinition[]   @relation("CoachClasses")
+  promotionsReceived BeltPromotion[]     @relation("PromotionsReceived")
+  promotionsAwarded  BeltPromotion[]     @relation("PromotionsAwarded")
+  competitionResults CompetitionResult[]
+  injuries           Injury[]
 
   @@index([gymId])
 }
@@ -98,6 +144,69 @@ model ClassSession {
 
   @@index([gymId, scheduledAt])
   @@index([classDefinitionId, scheduledAt])
+}
+
+// --- Athlete history (Phase 4) ---------------------------------------------
+
+model BeltPromotion {
+  id           String    @id @default(cuid())
+  userId       String
+  gymId        String
+  fromBelt     BeltRank?
+  fromStripes  Int       @default(0)
+  toBelt       BeltRank
+  toStripes    Int       @default(0)
+  awardedById  String?
+  awardedAt    DateTime  @default(now())
+  note         String?
+
+  user      User @relation("PromotionsReceived", fields: [userId], references: [id], onDelete: Cascade)
+  awardedBy User? @relation("PromotionsAwarded", fields: [awardedById], references: [id], onDelete: SetNull)
+  gym       Gym  @relation(fields: [gymId], references: [id], onDelete: Cascade)
+
+  @@index([userId, awardedAt])
+  @@index([gymId, awardedAt])
+}
+
+model CompetitionResult {
+  id            String                @id @default(cuid())
+  userId        String
+  gymId         String
+  eventName     String
+  division      String?
+  weightClassKg Int?
+  placement     CompetitionPlacement
+  wins          Int                   @default(0)
+  losses        Int                   @default(0)
+  competedAt    DateTime
+  note          String?
+  createdAt     DateTime              @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  gym  Gym  @relation(fields: [gymId], references: [id], onDelete: Cascade)
+
+  @@index([userId, competedAt])
+  @@index([gymId, competedAt])
+}
+
+model Injury {
+  id         String         @id @default(cuid())
+  userId     String
+  gymId      String
+  bodyPart   BodyPart
+  severity   InjurySeverity
+  status     InjuryStatus   @default(ACTIVE)
+  startedAt  DateTime       @default(now())
+  resolvedAt DateTime?
+  note       String?
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  gym  Gym  @relation(fields: [gymId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@index([gymId, status])
 }
 
 // --- Auth.js v5 (@auth/prisma-adapter) required tables ----------------------

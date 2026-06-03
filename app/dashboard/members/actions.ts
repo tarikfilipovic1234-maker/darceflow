@@ -112,11 +112,40 @@ export async function updateBeltAction(formData: FormData) {
     throw new Error("Invalid promotion.");
   }
 
-  await prisma.user.update({
-    where: { id: parsed.data.userId, gymId },
-    data: { belt: parsed.data.belt, stripes: parsed.data.stripes },
+  const note = String(formData.get("note") ?? "").trim() || null;
+
+  await prisma.$transaction(async (tx) => {
+    const current = await tx.user.findFirst({
+      where: { id: parsed.data.userId, gymId },
+      select: { belt: true, stripes: true },
+    });
+    if (!current) throw new Error("Member not found.");
+
+    const changed =
+      current.belt !== parsed.data.belt || current.stripes !== parsed.data.stripes;
+
+    await tx.user.update({
+      where: { id: parsed.data.userId },
+      data: { belt: parsed.data.belt, stripes: parsed.data.stripes },
+    });
+
+    if (changed) {
+      await tx.beltPromotion.create({
+        data: {
+          userId: parsed.data.userId,
+          gymId,
+          fromBelt: current.belt,
+          fromStripes: current.stripes,
+          toBelt: parsed.data.belt,
+          toStripes: parsed.data.stripes,
+          awardedById: session.user.id,
+          note,
+        },
+      });
+    }
   });
 
   revalidatePath(`/dashboard/members/${parsed.data.userId}`);
   revalidatePath("/dashboard/members");
+  revalidatePath("/dashboard");
 }

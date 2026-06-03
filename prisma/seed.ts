@@ -72,7 +72,7 @@ async function main() {
     stripes: 0,
   });
 
-  await upsertUser({
+  const student = await upsertUser({
     email: "student@darceflow.test",
     name: "Student Roger",
     password: "student1234",
@@ -131,7 +131,108 @@ async function main() {
     });
   }
 
-  console.log(`Seeded gym "${gym.name}" with members and a sample weekly schedule.`);
+  // Phase 4: belt history, competition results, and injuries for the demo student.
+  await prisma.beltPromotion.deleteMany({ where: { gymId: gym.id } });
+  await prisma.competitionResult.deleteMany({ where: { gymId: gym.id } });
+  await prisma.injury.deleteMany({ where: { gymId: gym.id } });
+
+  const months = (n: number) => {
+    const d = new Date();
+    d.setMonth(d.getMonth() - n);
+    return d;
+  };
+
+  const promotions: Array<{
+    fromBelt: BeltRank | null;
+    fromStripes: number;
+    toBelt: BeltRank;
+    toStripes: number;
+    awardedAt: Date;
+    note: string | null;
+  }> = [
+    { fromBelt: null, fromStripes: 0, toBelt: "WHITE", toStripes: 0, awardedAt: months(48), note: "Day one." },
+    { fromBelt: "WHITE", fromStripes: 3, toBelt: "BLUE", toStripes: 0, awardedAt: months(36), note: "Promoted at the winter graduation." },
+    { fromBelt: "BLUE", fromStripes: 4, toBelt: "PURPLE", toStripes: 0, awardedAt: months(12), note: "Earned after the open." },
+    { fromBelt: "PURPLE", fromStripes: 1, toBelt: "PURPLE", toStripes: 2, awardedAt: months(2), note: "Stripe for consistency." },
+  ];
+
+  for (const p of promotions) {
+    await prisma.beltPromotion.create({
+      data: {
+        userId: student.id,
+        gymId: gym.id,
+        awardedById: coach.id,
+        ...p,
+      },
+    });
+  }
+
+  await prisma.competitionResult.createMany({
+    data: [
+      {
+        userId: student.id,
+        gymId: gym.id,
+        eventName: "IBJJF European Open",
+        division: "Purple · Adult",
+        weightClassKg: 76,
+        placement: "GOLD",
+        wins: 4,
+        losses: 0,
+        competedAt: months(8),
+        note: "Submitted the final by triangle.",
+      },
+      {
+        userId: student.id,
+        gymId: gym.id,
+        eventName: "ADCC West Coast Trials",
+        division: "Adult",
+        weightClassKg: 77,
+        placement: "BRONZE",
+        wins: 3,
+        losses: 1,
+        competedAt: months(4),
+        note: "Lost the semi on advantages.",
+      },
+      {
+        userId: student.id,
+        gymId: gym.id,
+        eventName: "Dublin Open",
+        division: "Purple · Adult",
+        weightClassKg: 76,
+        placement: "SILVER",
+        wins: 2,
+        losses: 1,
+        competedAt: months(1),
+        note: null,
+      },
+    ],
+  });
+
+  await prisma.injury.createMany({
+    data: [
+      {
+        userId: student.id,
+        gymId: gym.id,
+        bodyPart: "KNEE",
+        severity: "MODERATE",
+        status: "RECOVERING",
+        startedAt: months(1),
+        note: "Tweaked during a Berimbolo attempt. Avoid heavy leg drags.",
+      },
+      {
+        userId: student.id,
+        gymId: gym.id,
+        bodyPart: "ELBOW",
+        severity: "MINOR",
+        status: "RESOLVED",
+        startedAt: months(6),
+        resolvedAt: months(5),
+        note: "Hyperextension from defending a kimura.",
+      },
+    ],
+  });
+
+  console.log(`Seeded gym "${gym.name}" with members, schedule, and athlete history.`);
   console.log("  admin@darceflow.test    / admin1234");
   console.log("  coach@darceflow.test    / coach1234");
   console.log("  student@darceflow.test  / student1234");

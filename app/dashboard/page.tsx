@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import {
   ArrowUpRight,
+  Bandage,
   CalendarClock,
   CreditCard,
   LineChart,
@@ -13,6 +14,7 @@ import {
 
 import { BeltBadge } from "@/components/athlete/belt-badge";
 import { RoleBadge } from "@/components/athlete/role-badge";
+import { BELT_LABEL } from "@/lib/belts";
 import { StatsCard } from "@/components/dashboard/stats-card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -22,6 +24,7 @@ import { Separator } from "@/components/ui/separator";
 import { prisma } from "@/lib/db";
 import { requireGymId } from "@/lib/db/scoped";
 import { dayLabel, formatDate, relativeTime } from "@/lib/format";
+import type { BeltRank } from "@/lib/generated/prisma/enums";
 import { cn } from "@/lib/utils";
 
 export const metadata: Metadata = { title: "Dashboard" };
@@ -51,41 +54,53 @@ export default async function DashboardHome() {
   const { session, gymId } = await requireGymId();
   const copy = ROLE_COPY[session.user.role] ?? ROLE_COPY.STUDENT;
 
-  const [gym, totals, recentMembers, weeklyClasses] = await Promise.all([
-    prisma.gym.findUnique({
-      where: { id: gymId },
-      select: { name: true, createdAt: true },
-    }),
-    prisma.$transaction([
-      prisma.user.count({ where: { gymId } }),
-      prisma.user.count({ where: { gymId, role: "COACH" } }),
-      prisma.user.count({ where: { gymId, role: "STUDENT" } }),
-      prisma.classDefinition.count({ where: { gymId } }),
-    ]),
-    prisma.user.findMany({
-      where: { gymId },
-      orderBy: { createdAt: "desc" },
-      take: 5,
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        image: true,
-        role: true,
-        belt: true,
-        stripes: true,
-        createdAt: true,
-      },
-    }),
-    prisma.classDefinition.findMany({
-      where: { gymId },
-      orderBy: [{ dayOfWeek: "asc" }, { startTime: "asc" }],
-      take: 4,
-      include: {
-        coach: { select: { name: true, email: true } },
-      },
-    }),
-  ]);
+  const [gym, totals, recentMembers, weeklyClasses, recentPromotions, activeInjuries] =
+    await Promise.all([
+      prisma.gym.findUnique({
+        where: { id: gymId },
+        select: { name: true, createdAt: true },
+      }),
+      prisma.$transaction([
+        prisma.user.count({ where: { gymId } }),
+        prisma.user.count({ where: { gymId, role: "COACH" } }),
+        prisma.user.count({ where: { gymId, role: "STUDENT" } }),
+        prisma.classDefinition.count({ where: { gymId } }),
+      ]),
+      prisma.user.findMany({
+        where: { gymId },
+        orderBy: { createdAt: "desc" },
+        take: 5,
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          image: true,
+          role: true,
+          belt: true,
+          stripes: true,
+          createdAt: true,
+        },
+      }),
+      prisma.classDefinition.findMany({
+        where: { gymId },
+        orderBy: [{ dayOfWeek: "asc" }, { startTime: "asc" }],
+        take: 4,
+        include: {
+          coach: { select: { name: true, email: true } },
+        },
+      }),
+      prisma.beltPromotion.findMany({
+        where: { gymId },
+        orderBy: { awardedAt: "desc" },
+        take: 4,
+        include: {
+          user: { select: { id: true, name: true, email: true } },
+        },
+      }),
+      prisma.injury.count({
+        where: { gymId, status: { in: ["ACTIVE", "RECOVERING"] } },
+      }),
+    ]);
 
   const [memberCount, coachCount, studentCount, classCount] = totals;
 
@@ -119,10 +134,10 @@ export default async function DashboardHome() {
           hint="weekly schedule"
         />
         <StatsCard
-          label="This week's attendance"
-          value="—"
-          icon={LineChart}
-          hint="Wired up in Phase 5"
+          label="Active injuries"
+          value={activeInjuries}
+          icon={Bandage}
+          hint={activeInjuries === 0 ? "Everyone's healthy" : "Plan sparring carefully"}
         />
         <StatsCard
           label="Active subscriptions"
@@ -232,22 +247,61 @@ export default async function DashboardHome() {
       </div>
 
       <Card>
+        <CardHeader className="flex flex-row items-start justify-between">
+          <div className="flex items-center gap-2">
+            <Trophy className="h-4 w-4 text-muted-foreground" />
+            <div>
+              <CardTitle className="text-base font-semibold">Recent promotions</CardTitle>
+              <CardDescription>Belts and stripes awarded across the gym.</CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+        <Separator />
+        <CardContent className="p-0">
+          {recentPromotions.length === 0 ? (
+            <p className="py-10 text-center text-sm text-muted-foreground">
+              No promotions yet — head to a member&apos;s profile and award the first.
+            </p>
+          ) : (
+            <ul className="divide-y divide-border/60">
+              {recentPromotions.map((p) => (
+                <li key={p.id}>
+                  <Link
+                    href={`/dashboard/members/${p.user.id}?tab=training`}
+                    className="flex items-center gap-3 px-6 py-3 transition-colors hover:bg-muted/40"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium">
+                        {p.user.name ?? p.user.email}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {p.fromBelt && p.fromBelt !== p.toBelt
+                          ? `Promoted ${BELT_LABEL[p.fromBelt as BeltRank]} → ${BELT_LABEL[p.toBelt]}`
+                          : p.toStripes > p.fromStripes
+                          ? `+${p.toStripes - p.fromStripes} stripe${
+                              p.toStripes - p.fromStripes === 1 ? "" : "s"
+                            } on ${BELT_LABEL[p.toBelt]}`
+                          : `${BELT_LABEL[p.toBelt]} belt`}{" "}
+                        · {relativeTime(p.awardedAt)}
+                      </p>
+                    </div>
+                    <BeltBadge belt={p.toBelt} stripes={p.toStripes} size="sm" />
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
         <CardHeader>
           <div className="flex items-center gap-2">
             <Sparkles className="h-4 w-4 text-muted-foreground" />
             <CardTitle className="text-base font-semibold">What&apos;s next on the roadmap</CardTitle>
           </div>
         </CardHeader>
-        <CardContent className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
-          <div className="space-y-1.5">
-            <div className="flex items-center gap-1.5 font-medium">
-              <Trophy className="h-3.5 w-3.5 text-muted-foreground" />
-              Phase 4 · Athletes
-            </div>
-            <p className="text-muted-foreground">
-              Belt history timeline, competition record, injury log.
-            </p>
-          </div>
+        <CardContent className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-3">
           <div className="space-y-1.5">
             <div className="flex items-center gap-1.5 font-medium">
               <LineChart className="h-3.5 w-3.5 text-muted-foreground" />
