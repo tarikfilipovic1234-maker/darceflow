@@ -7,9 +7,17 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: path.resolve(),
   },
-  // Phase 7 will add Vercel Blob / video host domains to `images.remotePatterns`.
-  // Phase 8 may add `serverExternalPackages: ["@prisma/client"]` if cold-start
-  // bundling complains about the Prisma adapter.
+  images: {
+    remotePatterns: [
+      // YouTube thumbnails for technique cards.
+      { protocol: "https", hostname: "i.ytimg.com" },
+      { protocol: "https", hostname: "img.youtube.com" },
+      // Vimeo thumbnails (if we ever wire up oEmbed lookups).
+      { protocol: "https", hostname: "i.vimeocdn.com" },
+      // Vercel Blob storage — covers the eventual upload path.
+      { protocol: "https", hostname: "**.public.blob.vercel-storage.com" },
+    ],
+  },
 };
 
 export default nextConfig;

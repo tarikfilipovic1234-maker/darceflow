@@ -5,6 +5,7 @@ import {
   Bandage,
   CalendarClock,
   CreditCard,
+  LibraryBig,
   LineChart,
   Sparkles,
   Trophy,
@@ -13,6 +14,7 @@ import {
 
 import { BeltBadge } from "@/components/athlete/belt-badge";
 import { RoleBadge } from "@/components/athlete/role-badge";
+import { TechniqueCard } from "@/components/library/technique-card";
 import { BELT_LABEL } from "@/lib/belts";
 import { StatsCard } from "@/components/dashboard/stats-card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -64,6 +66,7 @@ export default async function DashboardHome() {
     recentPromotions,
     activeInjuries,
     weekCheckIns,
+    recentTechniques,
   ] = await Promise.all([
       prisma.gym.findUnique({
         where: { id: gymId },
@@ -114,6 +117,22 @@ export default async function DashboardHome() {
       }),
       prisma.attendance.count({
         where: { gymId, checkedInAt: { gte: weekStart } },
+      }),
+      prisma.technique.findMany({
+        where: { gymId },
+        orderBy: { createdAt: "desc" },
+        take: 4,
+        select: {
+          id: true,
+          slug: true,
+          title: true,
+          position: true,
+          category: true,
+          thumbnailUrl: true,
+          durationSec: true,
+          tags: true,
+          _count: { select: { favorites: true } },
+        },
       }),
     ]);
 
@@ -329,6 +348,47 @@ export default async function DashboardHome() {
         </CardContent>
       </Card>
 
+      {recentTechniques.length > 0 ? (
+        <Card>
+          <CardHeader className="flex flex-row items-start justify-between">
+            <div className="flex items-center gap-2">
+              <LibraryBig className="h-4 w-4 text-muted-foreground" />
+              <div>
+                <CardTitle className="text-base font-semibold">Fresh in the library</CardTitle>
+                <CardDescription>The newest techniques from your coaches.</CardDescription>
+              </div>
+            </div>
+            <Link
+              href="/dashboard/library"
+              className={cn(
+                buttonVariants({ variant: "ghost", size: "sm" }),
+                "gap-1",
+              )}
+            >
+              Browse all
+              <ArrowUpRight className="h-3.5 w-3.5" />
+            </Link>
+          </CardHeader>
+          <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {recentTechniques.map((t) => (
+              <TechniqueCard
+                key={t.id}
+                technique={{
+                  slug: t.slug,
+                  title: t.title,
+                  position: t.position,
+                  category: t.category,
+                  thumbnailUrl: t.thumbnailUrl,
+                  durationSec: t.durationSec,
+                  tags: t.tags,
+                  favoritesCount: t._count.favorites,
+                }}
+              />
+            ))}
+          </CardContent>
+        </Card>
+      ) : null}
+
       <Card>
         <CardHeader>
           <div className="flex items-center gap-2">
@@ -336,16 +396,7 @@ export default async function DashboardHome() {
             <CardTitle className="text-base font-semibold">What&apos;s next on the roadmap</CardTitle>
           </div>
         </CardHeader>
-        <CardContent className="grid gap-3 text-sm sm:grid-cols-2">
-          <div className="space-y-1.5">
-            <div className="flex items-center gap-1.5 font-medium">
-              <Sparkles className="h-3.5 w-3.5 text-muted-foreground" />
-              Phase 7 · Library
-            </div>
-            <p className="text-muted-foreground">
-              Technique video library, tags, positions.
-            </p>
-          </div>
+        <CardContent className="text-sm">
           <div className="space-y-1.5">
             <div className="flex items-center gap-1.5 font-medium">
               <CreditCard className="h-3.5 w-3.5 text-muted-foreground" />

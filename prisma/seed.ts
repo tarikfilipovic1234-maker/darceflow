@@ -534,9 +534,193 @@ async function main() {
   const reservationCount = await prisma.reservation.count({ where: { gymId: gym.id } });
   const waitlistCount = await prisma.waitlistEntry.count({ where: { gymId: gym.id } });
 
+  // ---------------------------------------------------------------------
+  // Phase 7: technique library seed
+  // ---------------------------------------------------------------------
+  await prisma.techniqueFavorite.deleteMany({});
+  await prisma.technique.deleteMany({ where: { gymId: gym.id } });
+
+  const ytThumb = (id: string) => `https://i.ytimg.com/vi/${id}/hqdefault.jpg`;
+  const samples: Array<{
+    slug: string;
+    title: string;
+    description: string;
+    videoUrl: string;
+    thumbnailUrl: string;
+    position:
+      | "CLOSED_GUARD"
+      | "OPEN_GUARD"
+      | "HALF_GUARD"
+      | "SIDE_CONTROL"
+      | "MOUNT"
+      | "BACK"
+      | "STANDING";
+    category:
+      | "SUBMISSION"
+      | "SWEEP"
+      | "ESCAPE"
+      | "PASS"
+      | "TAKEDOWN"
+      | "CONCEPT";
+    tags: string[];
+    durationSec: number;
+    uploadedById: string;
+  }> = [
+    {
+      slug: "triangle-from-closed-guard",
+      title: "Triangle from closed guard",
+      description:
+        "The classic closed-guard triangle. Break their posture, hunt the arm in–arm out grip, and angle off before throwing the leg over.",
+      videoUrl: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+      thumbnailUrl: ytThumb("dQw4w9WgXcQ"),
+      position: "CLOSED_GUARD",
+      category: "SUBMISSION",
+      tags: ["triangle", "fundamentals", "gi"],
+      durationSec: 240,
+      uploadedById: coach.id,
+    },
+    {
+      slug: "hip-bump-sweep",
+      title: "Hip bump sweep",
+      description:
+        "When they sit up to stack you, post on your free hand, swing your hips off-center, and reverse them with the hip bump.",
+      videoUrl: "https://www.youtube.com/watch?v=oHg5SJYRHA0",
+      thumbnailUrl: ytThumb("oHg5SJYRHA0"),
+      position: "CLOSED_GUARD",
+      category: "SWEEP",
+      tags: ["sweep", "fundamentals"],
+      durationSec: 180,
+      uploadedById: coach.id,
+    },
+    {
+      slug: "knee-cut-pass",
+      title: "Knee cut pass",
+      description:
+        "Bread-and-butter pass from combat base. Pin the far leg, clear the bottom knee, settle into side control.",
+      videoUrl: "https://www.youtube.com/watch?v=jNQXAC9IVRw",
+      thumbnailUrl: ytThumb("jNQXAC9IVRw"),
+      position: "OPEN_GUARD",
+      category: "PASS",
+      tags: ["pass", "knee-cut", "fundamentals"],
+      durationSec: 360,
+      uploadedById: coach.id,
+    },
+    {
+      slug: "double-leg-takedown",
+      title: "Double leg takedown",
+      description:
+        "Drop step, change levels, head to the inside ear, finish with a turn-the-corner mechanic.",
+      videoUrl: "https://www.youtube.com/watch?v=ScMzIvxBSi4",
+      thumbnailUrl: ytThumb("ScMzIvxBSi4"),
+      position: "STANDING",
+      category: "TAKEDOWN",
+      tags: ["wrestling", "no-gi", "fundamentals"],
+      durationSec: 300,
+      uploadedById: coach.id,
+    },
+    {
+      slug: "back-escape-to-half-guard",
+      title: "Back escape to half guard",
+      description:
+        "Defend the choke side, scoot your hips, ride one hook over to the mat, and shuck their leg into half guard.",
+      videoUrl: "https://www.youtube.com/watch?v=L_jWHffIx5E",
+      thumbnailUrl: ytThumb("L_jWHffIx5E"),
+      position: "BACK",
+      category: "ESCAPE",
+      tags: ["escape", "back"],
+      durationSec: 270,
+      uploadedById: admin.id,
+    },
+    {
+      slug: "americana-from-side-control",
+      title: "Americana from side control",
+      description:
+        "Trap the far arm at a 90° angle, paint the floor, lift the elbow. Don't get lazy with the framing.",
+      videoUrl: "https://www.youtube.com/watch?v=2vjPBrBU-TM",
+      thumbnailUrl: ytThumb("2vjPBrBU-TM"),
+      position: "SIDE_CONTROL",
+      category: "SUBMISSION",
+      tags: ["kimura", "americana", "fundamentals"],
+      durationSec: 210,
+      uploadedById: coach.id,
+    },
+    {
+      slug: "mount-arm-bar",
+      title: "Arm bar from mount",
+      description:
+        "When they push the chest, isolate the arm, swing the leg around the head, and sit back tight on the elbow.",
+      videoUrl: "https://www.youtube.com/watch?v=YbJOTdZBX1g",
+      thumbnailUrl: ytThumb("YbJOTdZBX1g"),
+      position: "MOUNT",
+      category: "SUBMISSION",
+      tags: ["arm-bar", "mount", "fundamentals"],
+      durationSec: 200,
+      uploadedById: coach.id,
+    },
+    {
+      slug: "deep-half-sweep",
+      title: "Deep half guard sweep",
+      description:
+        "Slip under their hips, clamp the far leg, walk your shoulder to their ankle, and roll them over the top.",
+      videoUrl: "https://www.youtube.com/watch?v=fJ9rUzIMcZQ",
+      thumbnailUrl: ytThumb("fJ9rUzIMcZQ"),
+      position: "HALF_GUARD",
+      category: "SWEEP",
+      tags: ["deep-half", "advanced", "no-gi"],
+      durationSec: 420,
+      uploadedById: coach.id,
+    },
+    {
+      slug: "guard-retention-concept",
+      title: "Guard retention — frame, shoulder, hip",
+      description:
+        "The order of priorities when defending the pass. Frame first, post the shoulder, recover the hip last.",
+      videoUrl: "https://www.youtube.com/watch?v=tVj0ZTS4WF4",
+      thumbnailUrl: ytThumb("tVj0ZTS4WF4"),
+      position: "OPEN_GUARD",
+      category: "CONCEPT",
+      tags: ["retention", "concept", "framing"],
+      durationSec: 540,
+      uploadedById: admin.id,
+    },
+  ];
+
+  for (const t of samples) {
+    await prisma.technique.create({
+      data: {
+        gymId: gym.id,
+        ...t,
+      },
+    });
+  }
+
+  // Demo student favorites a few techniques so the "Saved" filter has data.
+  const favoriteSlugs = [
+    "triangle-from-closed-guard",
+    "guard-retention-concept",
+    "double-leg-takedown",
+  ];
+  for (const slug of favoriteSlugs) {
+    const t = await prisma.technique.findUnique({
+      where: { gymId_slug: { gymId: gym.id, slug } },
+    });
+    if (t) {
+      await prisma.techniqueFavorite.upsert({
+        where: {
+          userId_techniqueId: { userId: student.id, techniqueId: t.id },
+        },
+        update: {},
+        create: { userId: student.id, techniqueId: t.id },
+      });
+    }
+  }
+
+  const techniqueCount = await prisma.technique.count({ where: { gymId: gym.id } });
+
   console.log(`Seeded gym "${gym.name}" with members, schedule, athlete history,`);
   console.log(`and ${attendanceRows.length} attendance rows across 26 weeks.`);
   console.log(`Upcoming bookings: ${reservationCount} reservations, ${waitlistCount} waitlist.`);
+  console.log(`Library: ${techniqueCount} techniques with ${favoriteSlugs.length} student favorites.`);
   console.log("  admin@darceflow.test    / admin1234");
   console.log("  coach@darceflow.test    / coach1234");
   console.log("  student@darceflow.test  / student1234");

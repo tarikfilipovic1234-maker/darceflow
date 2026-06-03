@@ -64,6 +64,32 @@ enum CompetitionPlacement {
   DNP
 }
 
+enum Position {
+  CLOSED_GUARD
+  OPEN_GUARD
+  HALF_GUARD
+  BUTTERFLY_GUARD
+  SIDE_CONTROL
+  KNEE_ON_BELLY
+  MOUNT
+  BACK
+  TURTLE
+  STANDING
+  NORTH_SOUTH
+  OTHER
+}
+
+enum TechniqueCategory {
+  SUBMISSION
+  SWEEP
+  ESCAPE
+  PASS
+  TAKEDOWN
+  TRANSITION
+  DRILL
+  CONCEPT
+}
+
 model Gym {
   id        String   @id @default(cuid())
   slug      String   @unique
@@ -81,6 +107,7 @@ model Gym {
   athleteStats       AthleteStats[]
   reservations       Reservation[]
   waitlistEntries    WaitlistEntry[]
+  techniques         Technique[]
 }
 
 model User {
@@ -99,18 +126,20 @@ model User {
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
-  gym                Gym?                @relation(fields: [gymId], references: [id])
-  accounts           Account[]
-  sessions           Session[]
-  coachedClasses     ClassDefinition[]   @relation("CoachClasses")
-  promotionsReceived BeltPromotion[]     @relation("PromotionsReceived")
-  promotionsAwarded  BeltPromotion[]     @relation("PromotionsAwarded")
-  competitionResults CompetitionResult[]
-  injuries           Injury[]
-  attendances        Attendance[]
-  stats              AthleteStats?
-  reservations       Reservation[]
-  waitlistEntries    WaitlistEntry[]
+  gym                 Gym?                 @relation(fields: [gymId], references: [id])
+  accounts            Account[]
+  sessions            Session[]
+  coachedClasses      ClassDefinition[]    @relation("CoachClasses")
+  promotionsReceived  BeltPromotion[]      @relation("PromotionsReceived")
+  promotionsAwarded   BeltPromotion[]      @relation("PromotionsAwarded")
+  competitionResults  CompetitionResult[]
+  injuries            Injury[]
+  attendances         Attendance[]
+  stats               AthleteStats?
+  reservations        Reservation[]
+  waitlistEntries     WaitlistEntry[]
+  uploadedTechniques  Technique[]          @relation("UploadedTechniques")
+  techniqueFavorites  TechniqueFavorite[]
 
   @@index([gymId])
 }
@@ -330,4 +359,45 @@ model WaitlistEntry {
 
   @@unique([userId, classSessionId])
   @@index([classSessionId, position])
+}
+
+// --- Technique library (Phase 7) -------------------------------------------
+
+model Technique {
+  id           String            @id @default(cuid())
+  gymId        String
+  slug         String
+  title        String
+  description  String?
+  videoUrl     String
+  thumbnailUrl String?
+  position     Position
+  category     TechniqueCategory
+  tags         String[]
+  durationSec  Int?
+  uploadedById String?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  gym        Gym                 @relation(fields: [gymId], references: [id], onDelete: Cascade)
+  uploadedBy User?               @relation("UploadedTechniques", fields: [uploadedById], references: [id], onDelete: SetNull)
+  favorites  TechniqueFavorite[]
+
+  @@unique([gymId, slug])
+  @@index([gymId, position])
+  @@index([gymId, category])
+  @@index([gymId, createdAt])
+}
+
+model TechniqueFavorite {
+  id          String   @id @default(cuid())
+  userId      String
+  techniqueId String
+  createdAt   DateTime @default(now())
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  technique Technique @relation(fields: [techniqueId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, techniqueId])
+  @@index([techniqueId])
 }
