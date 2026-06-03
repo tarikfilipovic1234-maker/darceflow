@@ -19,6 +19,14 @@ enum Role {
   STUDENT
 }
 
+enum BeltRank {
+  WHITE
+  BLUE
+  PURPLE
+  BROWN
+  BLACK
+}
+
 model Gym {
   id        String   @id @default(cuid())
   slug      String   @unique
@@ -26,7 +34,9 @@ model Gym {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  users User[]
+  users            User[]
+  classDefinitions ClassDefinition[]
+  classSessions    ClassSession[]
 }
 
 model User {
@@ -37,15 +47,57 @@ model User {
   image          String?
   hashedPassword String?
   role           Role      @default(STUDENT)
+  belt           BeltRank?
+  stripes        Int       @default(0)
   gymId          String?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
-  gym      Gym?      @relation(fields: [gymId], references: [id])
-  accounts Account[]
-  sessions Session[]
+  gym             Gym?              @relation(fields: [gymId], references: [id])
+  accounts        Account[]
+  sessions        Session[]
+  coachedClasses  ClassDefinition[] @relation("CoachClasses")
 
   @@index([gymId])
+}
+
+// --- Domain models (Phase 3+) ----------------------------------------------
+
+model ClassDefinition {
+  id          String   @id @default(cuid())
+  gymId       String
+  name        String
+  description String?
+  // 0 = Sunday, 6 = Saturday
+  dayOfWeek   Int
+  // "HH:MM" 24h local-time string. Avoids TZ ambiguity for recurring classes.
+  startTime   String
+  durationMin Int
+  capacity    Int      @default(20)
+  coachId     String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  gym      Gym            @relation(fields: [gymId], references: [id], onDelete: Cascade)
+  coach    User?          @relation("CoachClasses", fields: [coachId], references: [id], onDelete: SetNull)
+  sessions ClassSession[]
+
+  @@index([gymId])
+  @@index([coachId])
+}
+
+model ClassSession {
+  id                String   @id @default(cuid())
+  classDefinitionId String
+  gymId             String
+  scheduledAt       DateTime
+  createdAt         DateTime @default(now())
+
+  classDefinition ClassDefinition @relation(fields: [classDefinitionId], references: [id], onDelete: Cascade)
+  gym             Gym             @relation(fields: [gymId], references: [id], onDelete: Cascade)
+
+  @@index([gymId, scheduledAt])
+  @@index([classDefinitionId, scheduledAt])
 }
 
 // --- Auth.js v5 (@auth/prisma-adapter) required tables ----------------------

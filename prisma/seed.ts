@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import { PrismaNeon } from "@prisma/adapter-neon";
 
 import { PrismaClient } from "../lib/generated/prisma/client";
+import type { BeltRank, Role } from "../lib/generated/prisma/enums";
 
 const connectionString = process.env.DATABASE_URL;
 if (!connectionString) {
@@ -16,19 +17,30 @@ async function upsertUser(opts: {
   email: string;
   name: string;
   password: string;
-  role: "ADMIN" | "COACH" | "STUDENT";
+  role: Role;
   gymId: string;
+  belt?: BeltRank | null;
+  stripes?: number;
 }) {
   const hashedPassword = await bcrypt.hash(opts.password, 10);
   return prisma.user.upsert({
     where: { email: opts.email },
-    update: { name: opts.name, role: opts.role, gymId: opts.gymId, hashedPassword },
+    update: {
+      name: opts.name,
+      role: opts.role,
+      gymId: opts.gymId,
+      hashedPassword,
+      belt: opts.belt ?? null,
+      stripes: opts.stripes ?? 0,
+    },
     create: {
       email: opts.email,
       name: opts.name,
       hashedPassword,
       role: opts.role,
       gymId: opts.gymId,
+      belt: opts.belt ?? null,
+      stripes: opts.stripes ?? 0,
     },
   });
 }
@@ -40,20 +52,24 @@ async function main() {
     create: { slug: "demo-academy", name: "Demo Academy" },
   });
 
-  await upsertUser({
+  const admin = await upsertUser({
     email: "admin@darceflow.test",
     name: "Demo Admin",
     password: "admin1234",
     role: "ADMIN",
     gymId: gym.id,
+    belt: "BROWN",
+    stripes: 2,
   });
 
-  await upsertUser({
+  const coach = await upsertUser({
     email: "coach@darceflow.test",
     name: "Coach Helio",
     password: "coach1234",
     role: "COACH",
     gymId: gym.id,
+    belt: "BLACK",
+    stripes: 0,
   });
 
   await upsertUser({
@@ -62,12 +78,64 @@ async function main() {
     password: "student1234",
     role: "STUDENT",
     gymId: gym.id,
+    belt: "PURPLE",
+    stripes: 2,
   });
 
-  console.log(`Seeded gym "${gym.name}" with admin / coach / student demo users.`);
+  // A handful of additional students with varied belts so the table looks alive.
+  const extras: { name: string; belt: BeltRank; stripes: number }[] = [
+    { name: "Carlos Souza", belt: "WHITE", stripes: 3 },
+    { name: "Maya Patel", belt: "BLUE", stripes: 1 },
+    { name: "Jordan Lee", belt: "BLUE", stripes: 4 },
+    { name: "Ana Ribeiro", belt: "PURPLE", stripes: 0 },
+    { name: "Liam Connor", belt: "WHITE", stripes: 0 },
+    { name: "Sofia Esposito", belt: "BROWN", stripes: 1 },
+  ];
+  for (const e of extras) {
+    const handle = e.name.toLowerCase().replace(/\s+/g, "");
+    await upsertUser({
+      email: `${handle}@darceflow.test`,
+      name: e.name,
+      password: "student1234",
+      role: "STUDENT",
+      gymId: gym.id,
+      belt: e.belt,
+      stripes: e.stripes,
+    });
+  }
+
+  // A starter weekly schedule. Upsert via composite-ish lookup (delete + create
+  // is safer here since there's no natural unique constraint on the schedule).
+  await prisma.classDefinition.deleteMany({ where: { gymId: gym.id } });
+
+  const classes = [
+    { name: "Fundamentals Gi", dayOfWeek: 1, startTime: "18:30", durationMin: 60, capacity: 30, coachId: coach.id, description: "Beginner-friendly. Focus on positions and escapes." },
+    { name: "Advanced Gi", dayOfWeek: 2, startTime: "19:00", durationMin: 75, capacity: 24, coachId: coach.id, description: "Blue belt and up. Open sparring last 20 minutes." },
+    { name: "No-Gi", dayOfWeek: 3, startTime: "19:30", durationMin: 60, capacity: 24, coachId: admin.id, description: "All levels welcome." },
+    { name: "Open Mat", dayOfWeek: 5, startTime: "12:00", durationMin: 90, capacity: 40, coachId: null, description: "Drill, roll, repeat." },
+    { name: "Competition Training", dayOfWeek: 6, startTime: "10:00", durationMin: 120, capacity: 20, coachId: coach.id, description: "Invite-only competition prep." },
+  ];
+
+  for (const c of classes) {
+    await prisma.classDefinition.create({
+      data: {
+        gymId: gym.id,
+        name: c.name,
+        description: c.description,
+        dayOfWeek: c.dayOfWeek,
+        startTime: c.startTime,
+        durationMin: c.durationMin,
+        capacity: c.capacity,
+        coachId: c.coachId,
+      },
+    });
+  }
+
+  console.log(`Seeded gym "${gym.name}" with members and a sample weekly schedule.`);
   console.log("  admin@darceflow.test    / admin1234");
   console.log("  coach@darceflow.test    / coach1234");
   console.log("  student@darceflow.test  / student1234");
+  console.log(`  + ${extras.length} extra students (password: student1234)`);
 }
 
 main()
