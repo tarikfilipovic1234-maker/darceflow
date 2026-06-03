@@ -385,8 +385,158 @@ async function main() {
     });
   }
 
+  // ---------------------------------------------------------------------
+  // Phase 6: materialize upcoming sessions and add a few reservations + a
+  // waitlist so the schedule page isn't empty out of the box.
+  // ---------------------------------------------------------------------
+  await prisma.waitlistEntry.deleteMany({ where: { gymId: gym.id } });
+  await prisma.reservation.deleteMany({ where: { gymId: gym.id } });
+
+  const futureCursor = new Date();
+  futureCursor.setHours(0, 0, 0, 0);
+  // Only generate sessions strictly in the future (the loop above already
+  // wrote past sessions for attendance).
+  futureCursor.setDate(futureCursor.getDate() + 1);
+  const futureEnd = new Date(futureCursor);
+  futureEnd.setDate(futureEnd.getDate() + 8 * 7);
+
+  const fc = new Date(futureCursor);
+  while (fc <= futureEnd) {
+    const dow = fc.getDay();
+    const todays = allDefs.filter((d) => d.dayOfWeek === dow);
+    for (const def of todays) {
+      const [hh, mm] = def.startTime.split(":").map((s) => Number.parseInt(s, 10));
+      const scheduledAt = new Date(fc);
+      scheduledAt.setHours(hh, mm, 0, 0);
+      await prisma.classSession.upsert({
+        where: {
+          classDefinitionId_scheduledAt: {
+            classDefinitionId: def.id,
+            scheduledAt,
+          },
+        },
+        update: {},
+        create: {
+          classDefinitionId: def.id,
+          gymId: gym.id,
+          scheduledAt,
+          durationMin: def.durationMin,
+        },
+      });
+    }
+    fc.setDate(fc.getDate() + 1);
+  }
+
+  const futureSessions = await prisma.classSession.findMany({
+    where: { gymId: gym.id, scheduledAt: { gte: new Date() } },
+    orderBy: { scheduledAt: "asc" },
+    take: 6,
+    include: { classDefinition: { select: { capacity: true } } },
+  });
+
+  // Reserve the demo student into every one of the next few sessions; layer
+  // some of the extras on top so coaches see a realistic roster.
+  for (const s of futureSessions) {
+    await prisma.reservation.upsert({
+      where: { userId_classSessionId: { userId: student.id, classSessionId: s.id } },
+      update: {},
+      create: { userId: student.id, classSessionId: s.id, gymId: gym.id },
+    });
+
+    const others = allUsers.filter((u) => u.id !== student.id);
+    // 40% per other user, capped at capacity.
+    let filled = 1;
+    for (const u of others) {
+      if (filled >= s.classDefinition.capacity) break;
+      if (Math.random() < 0.4) {
+        await prisma.reservation.upsert({
+          where: { userId_classSessionId: { userId: u.id, classSessionId: s.id } },
+          update: {},
+          create: { userId: u.id, classSessionId: s.id, gymId: gym.id },
+        });
+        filled += 1;
+      }
+    }
+  }
+
+  // Force one session to be full and put a few students on the waitlist so
+  // the demo state showcases the FIFO promotion flow.
+  const competitionTrainingDef = allDefs.find(
+    (d) => d.dayOfWeek === 6 && d.startTime === "10:00",
+  );
+  if (competitionTrainingDef) {
+    const nextCompTraining = await prisma.classSession.findFirst({
+      where: {
+        classDefinitionId: competitionTrainingDef.id,
+        scheduledAt: { gte: new Date() },
+      },
+      orderBy: { scheduledAt: "asc" },
+      include: { classDefinition: { select: { capacity: true } } },
+    });
+    if (nextCompTraining) {
+      // Reserve up to capacity.
+      const capacity = nextCompTraining.classDefinition.capacity;
+      const reservedSoFar = await prisma.reservation.count({
+        where: { classSessionId: nextCompTraining.id },
+      });
+      const need = Math.max(0, capacity - reservedSoFar);
+
+      const candidates = allUsers
+        .filter((u) => u.email !== "admin@darceflow.test")
+        .slice(0, need);
+      for (const u of candidates) {
+        await prisma.reservation.upsert({
+          where: {
+            userId_classSessionId: {
+              userId: u.id,
+              classSessionId: nextCompTraining.id,
+            },
+          },
+          update: {},
+          create: {
+            userId: u.id,
+            classSessionId: nextCompTraining.id,
+            gymId: gym.id,
+          },
+        });
+      }
+
+      // Anyone left becomes a waitlist entry.
+      const waitlisted = allUsers
+        .filter(
+          (u) =>
+            !candidates.find((c) => c.id === u.id) &&
+            u.email !== "admin@darceflow.test",
+        )
+        .slice(0, 3);
+      let pos = 1;
+      for (const u of waitlisted) {
+        await prisma.waitlistEntry.upsert({
+          where: {
+            userId_classSessionId: {
+              userId: u.id,
+              classSessionId: nextCompTraining.id,
+            },
+          },
+          update: { position: pos },
+          create: {
+            userId: u.id,
+            classSessionId: nextCompTraining.id,
+            gymId: gym.id,
+            position: pos,
+          },
+        });
+        pos += 1;
+      }
+    }
+  }
+
+  const reservationCount = await prisma.reservation.count({ where: { gymId: gym.id } });
+  const waitlistCount = await prisma.waitlistEntry.count({ where: { gymId: gym.id } });
+
   console.log(`Seeded gym "${gym.name}" with members, schedule, athlete history,`);
   console.log(`and ${attendanceRows.length} attendance rows across 26 weeks.`);
+  console.log(`Upcoming bookings: ${reservationCount} reservations, ${waitlistCount} waitlist.`);
   console.log("  admin@darceflow.test    / admin1234");
   console.log("  coach@darceflow.test    / coach1234");
   console.log("  student@darceflow.test  / student1234");

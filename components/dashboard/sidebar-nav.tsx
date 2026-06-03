@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   BarChart3,
+  CalendarCheck,
   CalendarClock,
   CreditCard,
   LayoutDashboard,
@@ -37,10 +38,16 @@ const items: NavItem[] = [
     roles: ["ADMIN", "COACH"],
   },
   {
-    href: "/dashboard/classes",
-    label: "Classes",
-    icon: CalendarClock,
+    href: "/dashboard/schedule",
+    label: "Schedule",
+    icon: CalendarCheck,
     roles: ["ADMIN", "COACH", "STUDENT"],
+  },
+  {
+    href: "/dashboard/classes",
+    label: "Class templates",
+    icon: CalendarClock,
+    roles: ["ADMIN", "COACH"],
   },
   {
     href: "/dashboard/check-in",

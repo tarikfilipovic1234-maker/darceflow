@@ -79,6 +79,8 @@ model Gym {
   injuries           Injury[]
   attendances        Attendance[]
   athleteStats       AthleteStats[]
+  reservations       Reservation[]
+  waitlistEntries    WaitlistEntry[]
 }
 
 model User {
@@ -107,6 +109,8 @@ model User {
   injuries           Injury[]
   attendances        Attendance[]
   stats              AthleteStats?
+  reservations       Reservation[]
+  waitlistEntries    WaitlistEntry[]
 
   @@index([gymId])
 }
@@ -147,6 +151,8 @@ model ClassSession {
   classDefinition ClassDefinition @relation(fields: [classDefinitionId], references: [id], onDelete: Cascade)
   gym             Gym             @relation(fields: [gymId], references: [id], onDelete: Cascade)
   attendances     Attendance[]
+  reservations    Reservation[]
+  waitlistEntries WaitlistEntry[]
 
   @@unique([classDefinitionId, scheduledAt])
   @@index([gymId, scheduledAt])
@@ -290,4 +296,38 @@ model AthleteStats {
 
   @@index([gymId, currentStreak])
   @@index([gymId, totalMatHours])
+}
+
+// --- Bookings (Phase 6) -----------------------------------------------------
+
+model Reservation {
+  id             String   @id @default(cuid())
+  userId         String
+  classSessionId String
+  gymId          String
+  createdAt      DateTime @default(now())
+
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  classSession ClassSession @relation(fields: [classSessionId], references: [id], onDelete: Cascade)
+  gym          Gym          @relation(fields: [gymId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, classSessionId])
+  @@index([classSessionId])
+  @@index([gymId, createdAt])
+}
+
+model WaitlistEntry {
+  id             String   @id @default(cuid())
+  userId         String
+  classSessionId String
+  gymId          String
+  position       Int
+  createdAt      DateTime @default(now())
+
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  classSession ClassSession @relation(fields: [classSessionId], references: [id], onDelete: Cascade)
+  gym          Gym          @relation(fields: [gymId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, classSessionId])
+  @@index([classSessionId, position])
 }

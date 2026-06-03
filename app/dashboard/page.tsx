@@ -6,7 +6,6 @@ import {
   CalendarClock,
   CreditCard,
   LineChart,
-  ShieldCheck,
   Sparkles,
   Trophy,
   Users,
@@ -23,7 +22,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Separator } from "@/components/ui/separator";
 import { prisma } from "@/lib/db";
 import { requireGymId } from "@/lib/db/scoped";
-import { dayLabel, formatDate, relativeTime } from "@/lib/format";
+import { dayLabel, formatDate, formatTime, relativeTime } from "@/lib/format";
 import type { BeltRank } from "@/lib/generated/prisma/enums";
 import { cn } from "@/lib/utils";
 
@@ -91,12 +90,15 @@ export default async function DashboardHome() {
           createdAt: true,
         },
       }),
-      prisma.classDefinition.findMany({
-        where: { gymId },
-        orderBy: [{ dayOfWeek: "asc" }, { startTime: "asc" }],
+      prisma.classSession.findMany({
+        where: { gymId, scheduledAt: { gte: new Date() } },
+        orderBy: { scheduledAt: "asc" },
         take: 4,
         include: {
-          coach: { select: { name: true, email: true } },
+          classDefinition: {
+            select: { name: true, capacity: true, coach: { select: { name: true } } },
+          },
+          _count: { select: { reservations: true, waitlistEntries: true } },
         },
       }),
       prisma.beltPromotion.findMany({
@@ -220,13 +222,13 @@ export default async function DashboardHome() {
               <CardDescription>Next sessions on the schedule.</CardDescription>
             </div>
             <Link
-              href="/dashboard/classes"
+              href="/dashboard/schedule"
               className={cn(
                 buttonVariants({ variant: "ghost", size: "sm" }),
                 "gap-1",
               )}
             >
-              All classes
+              See schedule
               <ArrowUpRight className="h-3.5 w-3.5" />
             </Link>
           </CardHeader>
@@ -234,26 +236,46 @@ export default async function DashboardHome() {
           <CardContent className="space-y-2 p-4">
             {weeklyClasses.length === 0 ? (
               <p className="py-10 text-center text-sm text-muted-foreground">
-                No classes scheduled yet.
+                No upcoming classes.
               </p>
             ) : (
-              weeklyClasses.map((c) => (
-                <div
-                  key={c.id}
-                  className="flex items-center justify-between gap-3 rounded-md border border-border/60 bg-muted/20 px-3 py-2"
-                >
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium">{c.name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {dayLabel(c.dayOfWeek)} · {c.startTime}
-                      {c.coach?.name ? ` · ${c.coach.name}` : ""}
-                    </p>
-                  </div>
-                  <Badge variant="outline" className="font-mono text-xs">
-                    {c.durationMin}m
-                  </Badge>
-                </div>
-              ))
+              weeklyClasses.map((c) => {
+                const filled = c._count.reservations;
+                const capacity = c.classDefinition.capacity;
+                const ratio = capacity === 0 ? 0 : filled / capacity;
+                return (
+                  <Link
+                    key={c.id}
+                    href={`/dashboard/schedule`}
+                    className="flex items-center justify-between gap-3 rounded-md border border-border/60 bg-muted/20 px-3 py-2 transition-colors hover:border-border hover:bg-muted/40"
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium">
+                        {c.classDefinition.name}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {dayLabel(c.scheduledAt.getDay())} · {formatTime(c.scheduledAt)}
+                        {c.classDefinition.coach?.name
+                          ? ` · ${c.classDefinition.coach.name}`
+                          : ""}
+                      </p>
+                    </div>
+                    <Badge
+                      variant="outline"
+                      className={cn(
+                        "font-mono text-xs",
+                        ratio >= 1
+                          ? "border-rose-500/40 text-rose-700 dark:text-rose-300"
+                          : ratio >= 0.75
+                          ? "border-amber-500/40 text-amber-700 dark:text-amber-300"
+                          : "border-emerald-500/40 text-emerald-700 dark:text-emerald-300",
+                      )}
+                    >
+                      {filled}/{capacity}
+                    </Badge>
+                  </Link>
+                );
+              })
             )}
           </CardContent>
         </Card>
@@ -314,16 +336,7 @@ export default async function DashboardHome() {
             <CardTitle className="text-base font-semibold">What&apos;s next on the roadmap</CardTitle>
           </div>
         </CardHeader>
-        <CardContent className="grid gap-3 text-sm sm:grid-cols-3">
-          <div className="space-y-1.5">
-            <div className="flex items-center gap-1.5 font-medium">
-              <ShieldCheck className="h-3.5 w-3.5 text-muted-foreground" />
-              Phase 6 · Booking
-            </div>
-            <p className="text-muted-foreground">
-              Reservations, waitlists, recurring sessions.
-            </p>
-          </div>
+        <CardContent className="grid gap-3 text-sm sm:grid-cols-2">
           <div className="space-y-1.5">
             <div className="flex items-center gap-1.5 font-medium">
               <Sparkles className="h-3.5 w-3.5 text-muted-foreground" />
