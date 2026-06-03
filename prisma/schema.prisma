@@ -77,6 +77,8 @@ model Gym {
   beltPromotions     BeltPromotion[]
   competitionResults CompetitionResult[]
   injuries           Injury[]
+  attendances        Attendance[]
+  athleteStats       AthleteStats[]
 }
 
 model User {
@@ -103,6 +105,8 @@ model User {
   promotionsAwarded  BeltPromotion[]     @relation("PromotionsAwarded")
   competitionResults CompetitionResult[]
   injuries           Injury[]
+  attendances        Attendance[]
+  stats              AthleteStats?
 
   @@index([gymId])
 }
@@ -137,13 +141,15 @@ model ClassSession {
   classDefinitionId String
   gymId             String
   scheduledAt       DateTime
+  durationMin       Int
   createdAt         DateTime @default(now())
 
   classDefinition ClassDefinition @relation(fields: [classDefinitionId], references: [id], onDelete: Cascade)
   gym             Gym             @relation(fields: [gymId], references: [id], onDelete: Cascade)
+  attendances     Attendance[]
 
+  @@unique([classDefinitionId, scheduledAt])
   @@index([gymId, scheduledAt])
-  @@index([classDefinitionId, scheduledAt])
 }
 
 // --- Athlete history (Phase 4) ---------------------------------------------
@@ -246,4 +252,42 @@ model VerificationToken {
   expires    DateTime
 
   @@unique([identifier, token])
+}
+
+// --- Attendance (Phase 5) --------------------------------------------------
+
+model Attendance {
+  id             String   @id @default(cuid())
+  userId         String
+  classSessionId String
+  gymId          String
+  checkedInAt    DateTime @default(now())
+  durationMin    Int
+  createdAt      DateTime @default(now())
+
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  classSession ClassSession @relation(fields: [classSessionId], references: [id], onDelete: Cascade)
+  gym          Gym          @relation(fields: [gymId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, classSessionId])
+  @@index([gymId, checkedInAt])
+  @@index([userId, checkedInAt])
+}
+
+// Denormalized per-user training stats. Updated transactionally on every
+// check-in so the leaderboard and home-page widgets read in O(1).
+model AthleteStats {
+  userId         String   @id
+  gymId          String
+  currentStreak  Int      @default(0)
+  longestStreak  Int      @default(0)
+  totalMatHours  Int      @default(0)
+  totalSessions  Int      @default(0)
+  lastTrainedAt  DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  gym  Gym  @relation(fields: [gymId], references: [id], onDelete: Cascade)
+
+  @@index([gymId, currentStreak])
+  @@index([gymId, totalMatHours])
 }

@@ -54,8 +54,18 @@ export default async function DashboardHome() {
   const { session, gymId } = await requireGymId();
   const copy = ROLE_COPY[session.user.role] ?? ROLE_COPY.STUDENT;
 
-  const [gym, totals, recentMembers, weeklyClasses, recentPromotions, activeInjuries] =
-    await Promise.all([
+  const weekStart = new Date();
+  weekStart.setDate(weekStart.getDate() - 7);
+
+  const [
+    gym,
+    totals,
+    recentMembers,
+    weeklyClasses,
+    recentPromotions,
+    activeInjuries,
+    weekCheckIns,
+  ] = await Promise.all([
       prisma.gym.findUnique({
         where: { id: gymId },
         select: { name: true, createdAt: true },
@@ -100,6 +110,9 @@ export default async function DashboardHome() {
       prisma.injury.count({
         where: { gymId, status: { in: ["ACTIVE", "RECOVERING"] } },
       }),
+      prisma.attendance.count({
+        where: { gymId, checkedInAt: { gte: weekStart } },
+      }),
     ]);
 
   const [memberCount, coachCount, studentCount, classCount] = totals;
@@ -128,6 +141,12 @@ export default async function DashboardHome() {
           hint={`${coachCount} coach${coachCount === 1 ? "" : "es"} · ${studentCount} student${studentCount === 1 ? "" : "s"}`}
         />
         <StatsCard
+          label="Check-ins this week"
+          value={weekCheckIns}
+          icon={LineChart}
+          hint="last 7 days"
+        />
+        <StatsCard
           label="Recurring classes"
           value={classCount}
           icon={CalendarClock}
@@ -138,12 +157,6 @@ export default async function DashboardHome() {
           value={activeInjuries}
           icon={Bandage}
           hint={activeInjuries === 0 ? "Everyone's healthy" : "Plan sparring carefully"}
-        />
-        <StatsCard
-          label="Active subscriptions"
-          value="—"
-          icon={CreditCard}
-          hint="Stripe in Phase 8"
         />
       </div>
 
@@ -301,16 +314,7 @@ export default async function DashboardHome() {
             <CardTitle className="text-base font-semibold">What&apos;s next on the roadmap</CardTitle>
           </div>
         </CardHeader>
-        <CardContent className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-3">
-          <div className="space-y-1.5">
-            <div className="flex items-center gap-1.5 font-medium">
-              <LineChart className="h-3.5 w-3.5 text-muted-foreground" />
-              Phase 5 · Attendance
-            </div>
-            <p className="text-muted-foreground">
-              Check-in flow, streaks, weekly heatmap, analytics.
-            </p>
-          </div>
+        <CardContent className="grid gap-3 text-sm sm:grid-cols-3">
           <div className="space-y-1.5">
             <div className="flex items-center gap-1.5 font-medium">
               <ShieldCheck className="h-3.5 w-3.5 text-muted-foreground" />
@@ -318,6 +322,15 @@ export default async function DashboardHome() {
             </div>
             <p className="text-muted-foreground">
               Reservations, waitlists, recurring sessions.
+            </p>
+          </div>
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-1.5 font-medium">
+              <Sparkles className="h-3.5 w-3.5 text-muted-foreground" />
+              Phase 7 · Library
+            </div>
+            <p className="text-muted-foreground">
+              Technique video library, tags, positions.
             </p>
           </div>
           <div className="space-y-1.5">
