@@ -15,6 +15,9 @@ export const {
   signOut,
 } = NextAuth({
   adapter: PrismaAdapter(prisma),
+  // Trust the localhost / preview hostname in dev. In production, set
+  // AUTH_URL to your real deployment URL — Auth.js will trust that.
+  trustHost: true,
   session: { strategy: "jwt" },
   pages: {
     signIn: "/login",
