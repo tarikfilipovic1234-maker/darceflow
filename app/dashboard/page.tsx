@@ -4,10 +4,10 @@ import {
   ArrowUpRight,
   Bandage,
   CalendarClock,
-  CreditCard,
   LibraryBig,
   LineChart,
   Sparkles,
+  TrendingUp,
   Trophy,
   Users,
 } from "lucide-react";
@@ -16,6 +16,8 @@ import { BeltBadge } from "@/components/athlete/belt-badge";
 import { RoleBadge } from "@/components/athlete/role-badge";
 import { TechniqueCard } from "@/components/library/technique-card";
 import { BELT_LABEL } from "@/lib/belts";
+import { computeGymMrrCents } from "@/lib/billing";
+import { formatMoney } from "@/lib/money";
 import { StatsCard } from "@/components/dashboard/stats-card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -138,6 +140,9 @@ export default async function DashboardHome() {
 
   const [memberCount, coachCount, studentCount, classCount] = totals;
 
+  const mrrCents =
+    session.user.role === "ADMIN" ? await computeGymMrrCents(gymId) : null;
+
   return (
     <div className="mx-auto w-full max-w-6xl space-y-8">
       <div className="space-y-2">
@@ -154,13 +159,26 @@ export default async function DashboardHome() {
         <p className="max-w-xl text-muted-foreground">{copy.lead}</p>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div
+        className={cn(
+          "grid gap-3 sm:grid-cols-2",
+          mrrCents !== null ? "lg:grid-cols-5" : "lg:grid-cols-4",
+        )}
+      >
         <StatsCard
           label="Members"
           value={memberCount}
           icon={Users}
           hint={`${coachCount} coach${coachCount === 1 ? "" : "es"} · ${studentCount} student${studentCount === 1 ? "" : "s"}`}
         />
+        {mrrCents !== null ? (
+          <StatsCard
+            label="MRR"
+            value={formatMoney(mrrCents)}
+            icon={TrendingUp}
+            hint="active + trialing"
+          />
+        ) : null}
         <StatsCard
           label="Check-ins this week"
           value={weekCheckIns}
@@ -393,20 +411,13 @@ export default async function DashboardHome() {
         <CardHeader>
           <div className="flex items-center gap-2">
             <Sparkles className="h-4 w-4 text-muted-foreground" />
-            <CardTitle className="text-base font-semibold">What&apos;s next on the roadmap</CardTitle>
+            <CardTitle className="text-base font-semibold">Built end-to-end</CardTitle>
+            <CardDescription>
+              Authentication, members, classes, athletes, attendance, bookings, the technique
+              library, and Stripe billing — all in one place.
+            </CardDescription>
           </div>
         </CardHeader>
-        <CardContent className="text-sm">
-          <div className="space-y-1.5">
-            <div className="flex items-center gap-1.5 font-medium">
-              <CreditCard className="h-3.5 w-3.5 text-muted-foreground" />
-              Phase 8 · Billing
-            </div>
-            <p className="text-muted-foreground">
-              Stripe subscriptions, invoices, and webhooks.
-            </p>
-          </div>
-        </CardContent>
       </Card>
     </div>
   );

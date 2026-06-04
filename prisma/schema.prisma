@@ -90,6 +90,27 @@ enum TechniqueCategory {
   CONCEPT
 }
 
+enum SubscriptionInterval {
+  MONTH
+  YEAR
+}
+
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  INCOMPLETE
+}
+
+enum InvoiceStatus {
+  DRAFT
+  OPEN
+  PAID
+  UNCOLLECTIBLE
+  VOID
+}
+
 model Gym {
   id        String   @id @default(cuid())
   slug      String   @unique
@@ -108,6 +129,9 @@ model Gym {
   reservations       Reservation[]
   waitlistEntries    WaitlistEntry[]
   techniques         Technique[]
+  plans              Plan[]
+  subscriptions      Subscription[]
+  invoices           Invoice[]
 }
 
 model User {
@@ -118,13 +142,14 @@ model User {
   image          String?
   hashedPassword String?
   role           Role      @default(STUDENT)
-  belt           BeltRank?
-  stripes        Int       @default(0)
-  weightClassKg  Int?
-  bio            String?
-  gymId          String?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  belt             BeltRank?
+  stripes          Int       @default(0)
+  weightClassKg    Int?
+  bio              String?
+  gymId            String?
+  stripeCustomerId String?   @unique
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
   gym                 Gym?                 @relation(fields: [gymId], references: [id])
   accounts            Account[]
@@ -140,6 +165,8 @@ model User {
   waitlistEntries     WaitlistEntry[]
   uploadedTechniques  Technique[]          @relation("UploadedTechniques")
   techniqueFavorites  TechniqueFavorite[]
+  subscriptions       Subscription[]
+  invoices            Invoice[]
 
   @@index([gymId])
 }
@@ -400,4 +427,73 @@ model TechniqueFavorite {
 
   @@unique([userId, techniqueId])
   @@index([techniqueId])
+}
+
+// --- Billing (Phase 8) -----------------------------------------------------
+
+model Plan {
+  id              String               @id @default(cuid())
+  gymId           String
+  name            String
+  description     String?
+  amountCents     Int
+  currency        String               @default("usd")
+  interval        SubscriptionInterval
+  features        String[]
+  stripeProductId String?              @unique
+  stripePriceId   String?              @unique
+  archived        Boolean              @default(false)
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+
+  gym           Gym            @relation(fields: [gymId], references: [id], onDelete: Cascade)
+  subscriptions Subscription[]
+
+  @@index([gymId, archived])
+}
+
+model Subscription {
+  id                   String             @id @default(cuid())
+  userId               String
+  gymId                String
+  planId               String?
+  stripeSubscriptionId String?            @unique
+  stripeCustomerId     String?
+  status               SubscriptionStatus
+  currentPeriodEnd     DateTime?
+  cancelAtPeriodEnd    Boolean            @default(false)
+  trialEndsAt          DateTime?
+  startedAt            DateTime           @default(now())
+  endedAt              DateTime?
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  gym      Gym       @relation(fields: [gymId], references: [id], onDelete: Cascade)
+  plan     Plan?     @relation(fields: [planId], references: [id], onDelete: SetNull)
+  invoices Invoice[]
+
+  @@index([userId])
+  @@index([gymId, status])
+}
+
+model Invoice {
+  id               String        @id @default(cuid())
+  subscriptionId   String
+  userId           String
+  gymId            String
+  stripeInvoiceId  String?       @unique
+  amountDueCents   Int
+  amountPaidCents  Int           @default(0)
+  currency         String        @default("usd")
+  status           InvoiceStatus
+  paidAt           DateTime?
+  hostedInvoiceUrl String?
+  invoicePdf       String?
+  createdAt        DateTime      @default(now())
+
+  subscription Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  gym          Gym          @relation(fields: [gymId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([gymId, createdAt])
 }

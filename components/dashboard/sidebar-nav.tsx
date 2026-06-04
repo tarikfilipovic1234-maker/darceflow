@@ -68,8 +68,14 @@ const items: NavItem[] = [
     roles: ["ADMIN", "COACH", "STUDENT"],
   },
   {
-    href: "/dashboard/admin/billing",
+    href: "/dashboard/billing",
     label: "Billing",
+    icon: CreditCard,
+    roles: ["ADMIN", "COACH", "STUDENT"],
+  },
+  {
+    href: "/dashboard/admin/billing",
+    label: "Gym billing",
     icon: CreditCard,
     roles: ["ADMIN"],
   },

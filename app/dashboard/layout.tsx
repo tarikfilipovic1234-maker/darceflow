@@ -1,9 +1,13 @@
+import Link from "next/link";
+import { CircleAlert } from "lucide-react";
+
 import { Brand } from "@/components/layout/brand";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { SidebarNav } from "@/components/dashboard/sidebar-nav";
 import { UserMenu } from "@/components/dashboard/user-menu";
 import { prisma } from "@/lib/db";
 import { requireSession } from "@/lib/db/scoped";
+import { isPastDue } from "@/lib/billing";
 
 export default async function DashboardLayout({
   children,
@@ -12,12 +16,15 @@ export default async function DashboardLayout({
 }) {
   const session = await requireSession();
 
-  const gym = session.user.gymId
-    ? await prisma.gym.findUnique({
-        where: { id: session.user.gymId },
-        select: { name: true },
-      })
-    : null;
+  const [gym, pastDue] = await Promise.all([
+    session.user.gymId
+      ? prisma.gym.findUnique({
+          where: { id: session.user.gymId },
+          select: { name: true },
+        })
+      : Promise.resolve(null),
+    isPastDue(session.user.id),
+  ]);
 
   return (
     <div className="grid min-h-screen grid-cols-1 lg:grid-cols-[260px_1fr]">
@@ -49,6 +56,19 @@ export default async function DashboardLayout({
             />
           </div>
         </header>
+        {pastDue ? (
+          <Link
+            href="/dashboard/billing"
+            className="border-b border-rose-500/40 bg-rose-500/10 px-4 py-2 text-sm text-rose-900 transition-colors hover:bg-rose-500/15 dark:text-rose-200 sm:px-6 lg:px-10"
+          >
+            <span className="inline-flex items-center gap-2">
+              <CircleAlert className="h-4 w-4" />
+              <span>
+                Your last membership payment failed. Update your card to keep training →
+              </span>
+            </span>
+          </Link>
+        ) : null}
         <main className="flex-1 px-4 py-8 sm:px-6 lg:px-10">{children}</main>
       </div>
     </div>

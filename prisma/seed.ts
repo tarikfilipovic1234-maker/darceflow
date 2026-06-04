@@ -717,10 +717,199 @@ async function main() {
 
   const techniqueCount = await prisma.technique.count({ where: { gymId: gym.id } });
 
+  // ---------------------------------------------------------------------
+  // Phase 8: plans, subscriptions, invoices. mock Stripe IDs so the UI is
+  // fully populated without needing real Stripe credentials.
+  // ---------------------------------------------------------------------
+  await prisma.invoice.deleteMany({ where: { gymId: gym.id } });
+  await prisma.subscription.deleteMany({ where: { gymId: gym.id } });
+  await prisma.plan.deleteMany({ where: { gymId: gym.id } });
+
+  const plans = await Promise.all([
+    prisma.plan.create({
+      data: {
+        gymId: gym.id,
+        name: "Drop-in",
+        description: "Pay-as-you-go — perfect for visitors.",
+        amountCents: 2500,
+        interval: "MONTH",
+        features: ["1 class per week", "Open mat access"],
+        stripeProductId: "prod_demo_dropin",
+        stripePriceId: "price_demo_dropin",
+      },
+    }),
+    prisma.plan.create({
+      data: {
+        gymId: gym.id,
+        name: "Unlimited",
+        description: "All classes, every day of the week.",
+        amountCents: 9900,
+        interval: "MONTH",
+        features: [
+          "Unlimited classes",
+          "Open mat access",
+          "Gi and no-gi",
+          "Technique library",
+        ],
+        stripeProductId: "prod_demo_unlimited",
+        stripePriceId: "price_demo_unlimited",
+      },
+    }),
+    prisma.plan.create({
+      data: {
+        gymId: gym.id,
+        name: "Competition",
+        description: "For athletes prepping for the next tournament.",
+        amountCents: 16900,
+        interval: "MONTH",
+        features: [
+          "Everything in Unlimited",
+          "Private competition training",
+          "Recorded sparring review",
+          "Comp travel discounts",
+        ],
+        stripeProductId: "prod_demo_competition",
+        stripePriceId: "price_demo_competition",
+      },
+    }),
+  ]);
+
+  const unlimited = plans[1];
+  const competition = plans[2];
+
+  function monthsAgo(n: number) {
+    const d = new Date();
+    d.setMonth(d.getMonth() - n);
+    return d;
+  }
+
+  // Demo student: ACTIVE Unlimited subscription, ~5 months of invoices.
+  const studentSub = await prisma.subscription.create({
+    data: {
+      userId: student.id,
+      gymId: gym.id,
+      planId: unlimited.id,
+      stripeSubscriptionId: "sub_demo_student",
+      stripeCustomerId: "cus_demo_student",
+      status: "ACTIVE",
+      currentPeriodEnd: (() => {
+        const d = new Date();
+        d.setDate(d.getDate() + 14);
+        return d;
+      })(),
+      startedAt: monthsAgo(5),
+    },
+  });
+
+  await prisma.user.update({
+    where: { id: student.id },
+    data: { stripeCustomerId: "cus_demo_student" },
+  });
+
+  for (let i = 4; i >= 0; i--) {
+    await prisma.invoice.create({
+      data: {
+        subscriptionId: studentSub.id,
+        userId: student.id,
+        gymId: gym.id,
+        stripeInvoiceId: `in_demo_student_${i}`,
+        amountDueCents: unlimited.amountCents,
+        amountPaidCents: unlimited.amountCents,
+        currency: "usd",
+        status: "PAID",
+        paidAt: monthsAgo(i),
+        hostedInvoiceUrl: "https://invoice.stripe.com/i/demo",
+      },
+    });
+  }
+
+  // One PAST_DUE subscription on a side student so the admin past-due card
+  // has something to show.
+  const pastDueStudent = await prisma.user.findFirst({
+    where: { gymId: gym.id, email: "carlossouza@darceflow.test" },
+  });
+  if (pastDueStudent) {
+    const sub = await prisma.subscription.create({
+      data: {
+        userId: pastDueStudent.id,
+        gymId: gym.id,
+        planId: unlimited.id,
+        stripeSubscriptionId: "sub_demo_carlos",
+        stripeCustomerId: "cus_demo_carlos",
+        status: "PAST_DUE",
+        currentPeriodEnd: (() => {
+          const d = new Date();
+          d.setDate(d.getDate() - 2);
+          return d;
+        })(),
+        startedAt: monthsAgo(3),
+      },
+    });
+    await prisma.user.update({
+      where: { id: pastDueStudent.id },
+      data: { stripeCustomerId: "cus_demo_carlos" },
+    });
+    await prisma.invoice.create({
+      data: {
+        subscriptionId: sub.id,
+        userId: pastDueStudent.id,
+        gymId: gym.id,
+        stripeInvoiceId: "in_demo_carlos_failed",
+        amountDueCents: unlimited.amountCents,
+        amountPaidCents: 0,
+        status: "OPEN",
+        hostedInvoiceUrl: "https://invoice.stripe.com/i/demo",
+      },
+    });
+  }
+
+  // A coach on the Competition plan, paid invoices.
+  const coachSub = await prisma.subscription.create({
+    data: {
+      userId: coach.id,
+      gymId: gym.id,
+      planId: competition.id,
+      stripeSubscriptionId: "sub_demo_coach",
+      stripeCustomerId: "cus_demo_coach",
+      status: "ACTIVE",
+      currentPeriodEnd: (() => {
+        const d = new Date();
+        d.setDate(d.getDate() + 22);
+        return d;
+      })(),
+      startedAt: monthsAgo(8),
+    },
+  });
+  await prisma.user.update({
+    where: { id: coach.id },
+    data: { stripeCustomerId: "cus_demo_coach" },
+  });
+  for (let i = 7; i >= 0; i--) {
+    await prisma.invoice.create({
+      data: {
+        subscriptionId: coachSub.id,
+        userId: coach.id,
+        gymId: gym.id,
+        stripeInvoiceId: `in_demo_coach_${i}`,
+        amountDueCents: competition.amountCents,
+        amountPaidCents: competition.amountCents,
+        currency: "usd",
+        status: "PAID",
+        paidAt: monthsAgo(i),
+        hostedInvoiceUrl: "https://invoice.stripe.com/i/demo",
+      },
+    });
+  }
+
+  const planCount = plans.length;
+  const subCount = await prisma.subscription.count({ where: { gymId: gym.id } });
+  const invoiceCount = await prisma.invoice.count({ where: { gymId: gym.id } });
+
   console.log(`Seeded gym "${gym.name}" with members, schedule, athlete history,`);
   console.log(`and ${attendanceRows.length} attendance rows across 26 weeks.`);
   console.log(`Upcoming bookings: ${reservationCount} reservations, ${waitlistCount} waitlist.`);
   console.log(`Library: ${techniqueCount} techniques with ${favoriteSlugs.length} student favorites.`);
+  console.log(`Billing: ${planCount} plans, ${subCount} subscriptions, ${invoiceCount} invoices.`);
   console.log("  admin@darceflow.test    / admin1234");
   console.log("  coach@darceflow.test    / coach1234");
   console.log("  student@darceflow.test  / student1234");
