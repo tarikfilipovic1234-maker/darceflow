@@ -1,5 +1,6 @@
 "use server";
 
+import { redirect } from "next/navigation";
 import { AuthError } from "next-auth";
 
 import { signIn } from "@/lib/auth";
@@ -32,10 +33,13 @@ export async function loginAction(
   }
 
   try {
+    // redirect: false → signIn sets the cookie and returns instead of
+    // throwing NEXT_REDIRECT. We then redirect explicitly below, OUTSIDE
+    // the try/catch so the framework handles the redirect cleanly.
     await signIn("credentials", {
       email: parsed.data.email,
       password: parsed.data.password,
-      redirectTo: "/dashboard",
+      redirect: false,
     });
   } catch (error) {
     if (error instanceof AuthError) {
@@ -44,5 +48,5 @@ export async function loginAction(
     throw error;
   }
 
-  return {};
+  redirect("/dashboard");
 }

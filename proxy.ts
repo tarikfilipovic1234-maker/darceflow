@@ -3,7 +3,6 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 
 const PROTECTED_PREFIXES = ["/dashboard"];
-const AUTH_ROUTES = ["/login", "/register"];
 
 export default auth((req) => {
   const { nextUrl } = req;
@@ -11,7 +10,6 @@ export default auth((req) => {
   const pathname = nextUrl.pathname;
 
   const isProtected = PROTECTED_PREFIXES.some((p) => pathname.startsWith(p));
-  const isAuthRoute = AUTH_ROUTES.includes(pathname);
 
   if (isProtected && !isLoggedIn) {
     const url = new URL("/login", nextUrl);
@@ -21,15 +19,15 @@ export default auth((req) => {
     return NextResponse.redirect(url);
   }
 
-  if (isAuthRoute && isLoggedIn) {
-    return NextResponse.redirect(new URL("/dashboard", nextUrl));
-  }
-
   // Admin-only sub-tree.
   if (pathname.startsWith("/dashboard/admin") && req.auth?.user.role !== "ADMIN") {
     return NextResponse.redirect(new URL("/dashboard", nextUrl));
   }
 
+  // Note: we intentionally do NOT redirect /login or /register when already
+  // logged in. The server action that signs you in handles its own redirect,
+  // and proxy-level redirects race with it during the cookie set/read window
+  // — Chrome throttles the back-and-forth and the page never settles.
   return NextResponse.next();
 });
 

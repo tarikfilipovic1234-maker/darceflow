@@ -1,5 +1,6 @@
 "use server";
 
+import { redirect } from "next/navigation";
 import bcrypt from "bcryptjs";
 
 import { signIn } from "@/lib/auth";
@@ -68,14 +69,14 @@ export async function registerAction(
     });
   });
 
-  // signIn throws a framework-handled redirect on success. Any other error
-  // (e.g. config) bubbles up to Next.js — credentials we just minted are
-  // guaranteed valid.
+  // redirect: false → signIn sets the cookie and returns. We then redirect
+  // explicitly below so the framework handles the navigation cleanly without
+  // racing against proxy.ts.
   await signIn("credentials", {
     email,
     password,
-    redirectTo: "/dashboard",
+    redirect: false,
   });
 
-  return {};
+  redirect("/dashboard");
 }
